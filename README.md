@@ -27,7 +27,7 @@ The GGUF Model Predictor is a command-line tool for loading and running predicti
 ## Usage
 To run the predictor, use the following command:
 ```bash
-python main.py <model_path> [--half] [--cpu]
+python gguf-mp.py <model_path> [--half] [--cpu]
 ```
 - `<model_path>`: Path to the model file (.gguf or .pt).
 - `--half`: Use half precision for the model (optional).
