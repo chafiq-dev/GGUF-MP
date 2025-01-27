@@ -1,125 +1,132 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
 import argparse
 import os
-import sys
-import torch
+import psutil
 import logging
+import json
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-
-def add_venv_to_path(venv_path='.venv'):
-    """Ensure the virtual environment is added to the Python path."""
-    venv_site_packages = os.path.join(venv_path, 'lib', 'python' + sys.version[:3], 'site-packages')
-    
-    if os.path.exists(venv_site_packages) and venv_site_packages not in sys.path:
-        sys.path.insert(0, venv_site_packages)
-        logging.info(f"Virtual environment's site-packages added to sys.path: {venv_site_packages}")
-    else:
-        logging.warning(f"Virtual environment at {venv_site_packages} not found or already in sys.path.")
-
-add_venv_to_path()
-
+# Attempt to import the gi library (GTK) if available
 try:
-    import torch
-    logging.info("PyTorch successfully imported.")
-except ImportError:
-    logging.error("Failed to import PyTorch. Make sure it's installed in the .venv environment.")
-    sys.exit(1)
+    import gi
+    gi.require_version('Gtk', '3.0')
+    from gi.repository import Gtk
+    GTK_AVAILABLE = True
+except (ImportError, ValueError):
+    GTK_AVAILABLE = False
 
-class GGUFModel:
-    def __init__(self, model_path, use_half_precision=False):
-        """Initialize the GGUF model with the given path."""
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"The specified model file at {model_path} does not exist.")
-        self.model_path = model_path
-        self.model = None
-        self.device = torch.device('cpu')
-        self.use_half_precision = use_half_precision
+# Configure logging
+logging.basicConfig(
+    filename='gguf_mp.log',
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler('gguf_mp.log'),
+        logging.StreamHandler()
+    ]
+)
 
-    def load(self):
-        """Load the GGUF model."""
-        logging.info(f"Loading GGUF model from {self.model_path}...")
-        
-        if self.model_path.endswith('.gguf'):
-            self.model = self._load_gguf_model(self.model_path)
-        elif self.model_path.endswith('.pt'):
-            self.model = self._load_pytorch_model(self.model_path)
-        else:
-            raise ValueError("Unsupported model format. Please provide a .gguf or .pt file.")
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Run the GGUF-MP model with specified performance settings and hardware configurations.")
+    parser.add_argument('--gpu-performance', choices=['high', 'medium', 'low'], default='high',
+                        help="Set GPU performance level. Choices are 'high', 'medium', or 'low'. Default is 'high'.")
+    parser.add_argument('--cpu-performance', choices=['high', 'medium', 'low'], default='high',
+                        help="Set CPU performance level. Choices are 'high', 'medium', or 'low'. Default is 'high'.")
+    parser.add_argument('--hardware-vendor', choices=['intel', 'nvidia', 'amd', 'unspecified'], default='unspecified',
+                        help="Specify hardware vendor. Choices are 'intel', 'nvidia', 'amd', or 'unspecified'. Default is 'unspecified'.")
+    parser.add_argument('--wizard', action='store_true', help="Run the configuration wizard to set up the model interactively.")
+    parser.add_argument('--sys-prmpt', type=str, help="Path to a file containing the system prompt to load.")
+    parser.add_argument('--gui', action='store_true', help="Launch a simple GTK GUI for configuration.")
+    parser.add_argument('--config', type=str, help="Path to a JSON configuration file.")
+    return parser.parse_args()
 
-        if self.use_half_precision and hasattr(self.model, 'half'):
-            self.model = self.model.half()
-            logging.info("Model converted to half precision (FP16).")
+def load_config(config_path: str) -> dict:
+    """Load configuration from a JSON file."""
+    if config_path and os.path.exists(config_path):
+        with open(config_path, 'r') as file:
+            config = json.load(file)
+            logging.info(f"Configuration loaded from {config_path}")
+            return config
+    else:
+        logging.error(f"Configuration file '{config_path}' not found.")
+        return {}
 
-        logging.info("Model loaded successfully.")
+def detect_system_capabilities() -> str:
+    """Detect system capabilities based on CPU usage and memory."""
+    cpu_usage = psutil.cpu_percent(interval=1)
+    memory = psutil.virtual_memory()
+    total_memory = memory.total / (1024 ** 3)  # Convert to GB
 
-    def _load_gguf_model(self, model_path):
-        """Load a GGUF model from a file."""
-        try:
-            # Implement GGUF loading logic here
-            logging.info(f"Successfully loaded GGUF model from {model_path}.")
-            return "GGUF model placeholder"  # Replace with actual model loading
-        except Exception as e:
-            raise RuntimeError(f"Failed to load model from {model_path}: {e}")
+    if cpu_usage > 80 or total_memory < 2:
+        return 'low'
+    elif cpu_usage > 50 or total_memory < 4:
+        return 'medium'
+    else:
+        return 'high'
 
-    def _load_pytorch_model(self, model_path):
-        """Load a PyTorch model from a file."""
-        try:
-            model = torch.load(model_path, map_location=self.device)
-            model.eval()
-            logging.info(f"Successfully loaded PyTorch model from {model_path}.")
-            return model
-        except Exception as e:
-            raise RuntimeError(f"Failed to load model from {model_path}: {e}")
+def load_system_prompt(file_path: str) -> str:
+    """Load the system prompt from a file."""
+    if file_path and os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            return file.read()
+    else:
+        logging.error(f"System prompt file '{file_path}' not found.")
+        return None
 
-    def predict(self, input_data):
-        """Run a prediction on the input data."""
-        if self.model is None:
-            raise RuntimeError("Model is not loaded. Please load the model first.")
-
-        logging.info(f"Running prediction with input: {input_data}")
-        # Placeholder prediction logic
-        result = self._mock_predict(input_data)
-        return result
-
-    def _mock_predict(self, input_data):
-        """A mock prediction method (replace with actual model prediction logic)."""
-        return {"prediction": "result_based_on_input"}
-
-    def optimize_for_cpu(self):
-        """Optimize model for older CPUs like Intel i3 350M."""
-        logging.info("Optimizing model for CPU...")
-        
-        num_threads = os.cpu_count()
-        torch.set_num_threads(num_threads)
-        logging.info(f"Using {num_threads} CPU threads for inference.")
-
-    def run_on_older_cpu(self):
-        """Ensures the model runs efficiently on older CPUs."""
-        logging.info("Running on older CPU configuration...")
-        self.optimize_for_cpu()
-        logging.info("Setting smaller batch size for inference.")
-        return self.predict({"input_data": "sample_input"})
+def wizard_mode() -> tuple:
+    """Run the configuration wizard for user input."""
+    print("Welcome to the configuration wizard.")
+    gpu_perf = input("Select GPU performance (high/medium/low): ")
+    cpu_perf = input("Select CPU performance (high/medium/low): ")
+    vendor = input("Specify hardware vendor (intel/nvidia/amd/unspecified): ")
+    return gpu_perf, cpu_perf, vendor
 
 def main():
-    parser = argparse.ArgumentParser(description="Load and run predictions with GGUF models.")
-    parser.add_argument('model_path', type=str, help='Path to the model file (.gguf or .pt)')
-    parser.add_argument('--half', action='store_true', help='Use half precision for the model')
-    parser.add_argument('--cpu', action='store_true', help='Optimize for older CPU')
+    args = parse_args()
 
-    args = parser.parse_args()
+    if not GTK_AVAILABLE:
+        proceed = input("GTK is not supported or the gi library is not installed on your system. Use wizard mode instead? (Y/N): ").strip().lower()
+        if proceed != 'y':
+            logging.info("User chose not to proceed with wizard mode. Exiting.")
+            print("Exiting the program.")
+            return
 
-    model = GGUFModel(args.model_path, use_half_precision=args.half)
-    model.load()
-
-    if args.cpu:
-        result = model.run_on_older_cpu()
+    if args.wizard:
+        gpu_perf, cpu_perf, vendor = wizard_mode()
     else:
-        result = model.predict({"input_data": "sample_input"})
+        if args.config:
+            config = load_config(args.config)
+            if config:
+                gpu_perf = config.get('gpu-performance', 'high')
+                cpu_perf = config.get('cpu-performance', 'high')
+                vendor = config.get('hardware-vendor', 'unspecified')
+            else:
+                logging.error("Invalid configuration. Exiting.")
+                print("Invalid configuration. Exiting.")
+                return
+        else:
+            gpu_perf = args.gpu_performance
+            cpu_perf = args.cpu_performance
+            vendor = args.hardware_vendor
 
-    logging.info(f"Prediction result: {result}")
+    system_prompt = load_system_prompt(args.sys_prmpt)
+    if system_prompt:
+        logging.info(f"System prompt loaded from {args.sys_prmpt}")
+    else:
+        logging.warning("No system prompt loaded.")
+
+    performance_mode = detect_system_capabilities()
+    logging.info(f"Detected system performance mode: {performance_mode}")
+
+    if performance_mode == 'low':
+        logging.info("Applying low performance settings.")
+        # Apply low performance settings
+    elif performance_mode == 'medium':
+        logging.info("Applying medium performance settings.")
+        # Apply medium performance settings
+    else:
+        logging.info("Applying high performance settings.")
+        # Apply high performance settings
 
 if __name__ == "__main__":
     main()
