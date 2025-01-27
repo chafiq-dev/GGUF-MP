@@ -1,21 +1,26 @@
 # GGUF Model Predictor
 
 ## Description
-The GGUF Model Predictor is a Python utility for running GGUF models with configurable performance settings and hardware configurations. It provides flexible options for optimizing model performance based on your system capabilities and hardware specifications.
+The GGUF Model Predictor is a Python utility for loading and running GGUF language models with PyTorch integration. It provides flexible options for optimizing model performance based on your system capabilities and hardware specifications, with support for both CPU and GPU acceleration.
 
 ## Features
 
-- Dynamic performance optimization based on system capabilities
+- PyTorch integration with CUDA support for GPU acceleration
+- Automatic model optimization based on system capabilities
 - Support for multiple hardware vendors (Intel, NVIDIA, AMD)
+- FP16 precision support for improved performance on compatible GPUs
 - Interactive configuration wizard
 - Optional GTK-based GUI interface
 - Configurable via command-line arguments or JSON configuration file
 - System prompt loading capability
 - Comprehensive logging system
+- Dynamic performance scaling based on available GPU/CPU resources
 
 ## Requirements
 
 - Python 3.x
+- PyTorch
+- ctransformers
 - psutil
 - GTK3 (optional, for GUI support)
 - PyGObject (optional, for GUI support)
@@ -30,7 +35,7 @@ cd gguf-mp
 
 2. Install required dependencies:
 ```bash
-pip install psutil
+pip install torch ctransformers psutil
 ```
 
 3. For GUI support (optional):
@@ -50,10 +55,11 @@ brew install gtk+3 pygobject3
 ### Command Line Arguments
 
 ```bash
-python gguf-mp.py [options]
+python gguf-mp.py --model-path PATH_TO_MODEL [options]
 ```
 
 Available options:
+- `--model-path PATH`: Path to your GGUF model file (required)
 - `--gpu-performance {high,medium,low}`: Set GPU performance level (default: high)
 - `--cpu-performance {high,medium,low}`: Set CPU performance level (default: high)
 - `--hardware-vendor {intel,nvidia,amd,unspecified}`: Specify hardware vendor (default: unspecified)
@@ -68,6 +74,7 @@ Create a JSON file with your preferred settings:
 
 ```json
 {
+    "model-path": "/path/to/model.gguf",
     "gpu-performance": "high",
     "cpu-performance": "medium",
     "hardware-vendor": "nvidia"
@@ -86,19 +93,41 @@ Run the interactive configuration wizard:
 python gguf-mp.py --wizard
 ```
 
+## Model Optimization
+
+The utility automatically optimizes model loading and inference based on:
+- Available GPU memory (if CUDA is available)
+- CPU resources
+- System memory
+- Selected performance profile
+
+Optimization features include:
+- Automatic FP16 conversion for high-performance GPU mode
+- Dynamic CUDA memory management
+- Adaptive performance settings based on available resources
+
 ## Logging
 
 The utility logs all operations to `gguf_mp.log`. The log includes:
+- Model loading status and configurations
 - Performance detection results
 - Configuration loading status
 - System prompt loading status
 - Error messages and warnings
+- GPU/CPU optimization settings
 
 ## System Requirements
 
+Minimum requirements:
+- 4GB RAM for CPU mode
+- 4GB VRAM for GPU mode (recommended: 8GB+ for larger models)
+- Python 3.7 or higher
+- CUDA-compatible GPU for GPU acceleration (optional)
+
 The utility automatically detects system capabilities and adjusts settings based on:
-- CPU usage
-- Available memory
+- GPU memory and capabilities (if available)
+- CPU usage and specifications
+- Available system memory
 - Hardware vendor specifications
 
 ## Contributing
